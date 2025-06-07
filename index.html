@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang='en' data-color-mode='dark' data-light-theme='light' data-dark-theme='dark'>
+<head>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>Flexure Hinge Calculator</title>
+  <link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/@primer/css@5.10.2/dist/primer.min.css'>
+  <style>
+    body {
+      background-color: #596275;
+      color: #f0f6fc;
+      font-family: "Segoe UI", Arial, sans-serif;
+      padding: 2rem;
+      max-width: 720px;
+      margin: auto;
+    }
+    h1 { font-size: 2rem; margin-bottom: 1.5rem; }
+    .Box {
+      background-color: #3e4251;
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    #hingeSVG {
+      width: 100%; height: 300px;
+      background-color: #2d2f3d;
+      border: 1px solid #44475a;
+      border-radius: 6px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+      align-items: end;
+    }
+    .form-full { grid-column: span 2; }
+    label span.f6 {
+      color: #c3c9d9;
+      margin-bottom: 0.25rem;
+      display: block;
+    }
+    .FormControl {
+      background-color: #282a36;
+      border: 1px solid #44475a;
+      color: #f8f8f2;
+      padding: 0.5rem;
+    }
+    .FormControl:focus {
+      border-color: #61afef;
+      box-shadow: 0 0 0 2px rgba(97,175,239,0.3);
+    }
+    .btn-primary {
+      grid-column: span 2;
+      background-color: #61afef;
+      border-color: #528bff;
+      padding: 0.75rem;
+    }
+    .btn-primary:hover { background-color: #528bff; }
+    #output {
+      margin-top: 1rem;
+      color: #e6e1dc;
+      font-weight: 600;
+    }
+    .legend {
+      display: flex;
+      gap: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+    }
+    .swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 2px;
+      display: inline-block;
+      background-color: #61afef;
+    }
+    table {
+      width: 100%;
+      margin-top: 1rem;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    th, td {
+      padding: 0.5rem;
+      border: 1px solid #44475a;
+    }
+    th {
+      background-color: #44475a;
+      color: #f0f6fc;
+      text-align: left;
+    }
+    td { background-color: #2d2f3d; color: #c3c9d9; }
+  </style>
+</head>
+<body>
+  <h1>Flexure Hinge Calculator</h1>
+  <div class='Box'>
+    <form id='hingeForm' class='form-grid' onsubmit='event.preventDefault(); calculate();'>
+      <label>
+        <span class='f6'>Young’s Modulus (GPa)</span>
+        <input id='inputE' class='FormControl width-full' type='number' value='2' step='0.1' required>
+      </label>
+      <label>
+        <span class='f6'>Bend Angle, θ (°)</span>
+        <input id='inputTheta' class='FormControl width-full' type='number' value='90' step='1' required>
+      </label>
+      <label>
+        <span class='f6'>Allowable Stress (MPa)</span>
+        <input id='inputSigma' class='FormControl width-full' type='number' value='30' step='1' required>
+      </label>
+      <label>
+        <span class='f6'>Solve For</span>
+        <select id='mode' class='FormControl width-full'>
+          <option value='t'>Thickness, t (mm)</option>
+          <option value='l'>Length, l (mm)</option>
+        </select>
+      </label>
+      <label id='knownLabel' class='form-full'>
+        <span class='f6' id='knownText'>Known length, l (mm)</span>
+        <input id='knownInput' class='FormControl width-full' type='number' value='12' step='0.1' required>
+      </label>
+      <button type='submit' class='btn btn-primary'>Calculate</button>
+      <p id='output' class='form-full'></p>
+    </form>
+  </div>
+  <div class='Box'>
+    <h2 class='f5'>Hinge Preview</h2>
+    <div class='legend'>
+      <div class='legend-item'><span class='swatch'></span>Bending section</div>
+      <div class='legend-item'><span class='swatch' style='background-color:#f0f6fc;border:1px solid #44475a'></span>Pivot center</div>
+    </div>
+    <svg id='hingeSVG'></svg>
+    <table>
+      <thead>
+        <tr><th>Process</th><th>Avg. Yield Stress (MPa)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>FDM (PLA/ABS)</td><td>30–50</td></tr>
+        <tr><td>SLA / Resin</td><td>60–80</td></tr>
+        <tr><td>Bambu Labs PLA‑CF</td><td>55</td></tr>
+        <tr><td>Bambu Labs PLA‑Tough</td><td>45</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <script>
+    const inputE = document.getElementById('inputE');
+    const inputTheta = document.getElementById('inputTheta');
+    const inputSigma = document.getElementById('inputSigma');
+    const modeInput = document.getElementById('mode');
+    const knownInput = document.getElementById('knownInput');
+    const knownText = document.getElementById('knownText');
+    const output = document.getElementById('output');
+    const hingeSVG = document.getElementById('hingeSVG');
+
+    function updateKnownLabel() {
+      if (modeInput.value === 't') {
+        knownText.textContent = 'Known length, l (mm)';
+        knownInput.value = 12;
+      } else {
+        knownText.textContent = 'Known thickness, t (mm)';
+        knownInput.value = 0.5;
+      }
+    }
+
+    modeInput.addEventListener('change', () => { updateKnownLabel(); calculate(); });
+    [inputE, inputTheta, inputSigma, knownInput].forEach(el => el.addEventListener('input', calculate));
+
+    function calculate() {
+      const E = Number(inputE.value) * 1e9;
+      const theta = Number(inputTheta.value) * Math.PI / 180;
+      const sigma = Number(inputSigma.value) * 1e6;
+      const mode = modeInput.value;
+      const known = Number(knownInput.value) / 1000;
+      let t, l, resultText;
+      if (mode === 't') { l = known; t = (2*l*sigma)/(E*theta); resultText = `Required thickness: ${(t*1e3).toFixed(2)} mm`; }
+      else { t = known; l = (E*t*theta)/(2*sigma); resultText = `Required length: ${(l*1e3).toFixed(2)} mm`; }
+      output.textContent = resultText;
+      drawHinge(l, t, theta);
+    }
+
+    function drawHinge(l, t, theta) {
+      const svg = hingeSVG; while (svg.firstChild) svg.removeChild(svg.firstChild);
+      const w=svg.clientWidth, h=svg.clientHeight;
+      const margin=20, cx=w/2, cy=h/2;
+      const baseR=(Math.min(w,h)-margin*2)/2;
+      const strokeW=Math.max(2,(t*1000/(l*1000))*baseR);
+      const outerR=baseR+strokeW/2, innerR=baseR-strokeW/2;
+      const startAngle=-Math.PI/2, endAngle=startAngle+theta;
+      const largeArc=theta>Math.PI?1:0;
+      const x1o=cx+outerR*Math.cos(startAngle), y1o=cy+outerR*Math.sin(startAngle);
+      const x2o=cx+outerR*Math.cos(endAngle), y2o=cy+outerR*Math.sin(endAngle);
+      const x2i=cx+innerR*Math.cos(endAngle), y2i=cy+innerR*Math.sin(endAngle);
+      const x1i=cx+innerR*Math.cos(startAngle), y1i=cy+innerR*Math.sin(startAngle);
+      const path=document.createElementNS(svg.namespaceURI,'path');
+      const d=[`M${x1o},${y1o}`,`A${outerR},${outerR} 0 ${largeArc} 1 ${x2o},${y2o}`,`L${x2i},${y2i}`,`A${innerR},${innerR} 0 ${largeArc} 0 ${x1i},${y1i}`,'Z'].join(' ');
+      path.setAttribute('d',d); path.setAttribute('fill','#61afef'); svg.appendChild(path);
+      const pivot=document.createElementNS(svg.namespaceURI,'circle'); pivot.setAttribute('cx',cx); pivot.setAttribute('cy',cy); pivot.setAttribute('r',4); pivot.setAttribute('fill','#f0f6fc'); svg.appendChild(pivot);
+    }
+
+    updateKnownLabel(); calculate();
+  </script>
+</body>
+</html>
